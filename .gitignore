@@ -1,0 +1,5 @@
+wake.db
+.build/
+.vscode/
+.fuse/
+.fuse.log
