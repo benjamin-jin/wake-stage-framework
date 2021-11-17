@@ -1,0 +1,144 @@
+package stagify
+from wake import _
+
+# Annotation
+# Name : Name of Annotation (Type of Annotation in Chisel3) (should filter with name)
+#   Scope of Name should be sealed, in order to prevent `set` and `edit` in phases
+tuple Annotation =
+  Name : String
+  export String  : Option String
+  export Path    : Option Path
+  export Job     : Option Job
+  export Integer : Option Integer
+  export Double  : Option Double
+  export Boolean : Option Boolean
+
+## API TO MAKE NEW TYPE OF ANNOTATION
+export def create_annotation name = Annotation name None None None None None None
+### TEST
+def annotation_type1 = create_annotation "test type"
+
+### Default annotations
+#### Type of logLevel Annotation
+export def annotation_logLevel = create_annotation "logLevel"
+#### Instances of logLevel Annotation
+export def logInfo    = annotation_logLevel | set_annotation_integer 1
+export def logDebug   = annotation_logLevel | set_annotation_integer 2
+
+## API TO SET TYPE OF VALUE IN ANNOTATION
+export def set_annotation_string    value   annotation = annotation | setAnnotationString   (Some value)
+export def set_annotation_path      value   annotation = annotation | setAnnotationPath     (Some value)
+export def set_annotation_job       value   annotation = annotation | setAnnotationJob      (Some value)
+export def set_annotation_integer   value   annotation = annotation | setAnnotationInteger  (Some value)
+export def set_annotation_double    value   annotation = annotation | setAnnotationDouble   (Some value)
+export def set_annotation_boolean   value   annotation = annotation | setAnnotationBoolean  (Some value)
+### TEST
+# def annotation1 = set_annotation_string ("test") annotation_type1
+# def anntoation2 = set_annotation_path (makeBadPath (makeError "TEST ERROR")) annotation_type1
+# # def annotation3 = set_annotation_job (makePlan "test" Nil "echo hello" | runJob) annotation_type1
+# def annotation4 = set_annotation_integer (1) annotation_type1
+# def annotation5 = set_annotation_double (2.0) annotation_type1
+# def annotation6 = set_annotation_boolean (False) annotation_type1
+
+def flattenMap list option =
+  match option
+    None = list
+    Some value = list ++ (value, Nil)
+
+def get_annotation_helper annotationFilter annos =
+  def recursive (string; path; job; integer; double; boolean) anno =
+    match anno.head
+      None      = string; path; job; integer; double; boolean
+      Some (Annotation name string2 path2 job2 integer2 double2 boolean2) =
+        if (annotationFilter name)
+        then
+          def newAcc    = flattenMap string string2; flattenMap path path2; flattenMap job job2; flattenMap integer integer2; flattenMap double double2; flattenMap boolean boolean2
+          recursive newAcc anno.tail
+        else
+          recursive (string; path; job; integer; double; boolean) anno.tail
+  recursive (Nil; Nil; Nil; Nil; Nil; Nil) annos
+
+# API TO COLLECT DATA FROM DATA TYPE
+export def collect name annos = get_annotation_helper (_ ==* name) annos
+export def collectString name annos =
+  def (value; _;_;_;_;_) = collect name annos
+  value
+export def collectPath name annos =
+  def (_; value;_;_;_;_) = collect name annos
+  value
+export def collectJob name annos =
+  def (_; _;value;_;_;_) = collect name annos
+  value
+export def collectInteger name annos =
+  def (_;_;_;value;_;_) = collect name annos
+  value
+export def collectDouble name annos =
+  def (_; _;_;_;value;_) = collect name annos
+  value
+export def collectBoolean name annos =
+  def (_; _;_;_;_;value) = collect name annos
+  value
+
+export def collectFirst list name =
+  match list.head
+    Some x = x
+    None = unreachable "At least one {name} annotation is required"
+
+### TEST
+# def mytest1 Unit =
+#   def list = annotation1, anntoation2, annotation4, annotation5, annotation6, Nil
+#   collect (annotation_type1.getAnnotationName) list
+# def mytest2 Unit =
+#   def list = annotation1, anntoation2, annotation4, annotation5, annotation6, Nil
+#   collectString (annotation_type1.getAnnotationName) list
+# def mytest3 Unit =
+#   def list = annotation1, anntoation2, annotation4, annotation5, annotation6, Nil
+#   collectPath (annotation_type1.getAnnotationName) list
+# def mytest4 Unit =
+#   def list = annotation1, anntoation2, annotation4, annotation5, annotation6, Nil
+#   collectJob (annotation_type1.getAnnotationName) list
+# def mytest5 Unit =
+#   def list = annotation1, anntoation2, annotation4, annotation5, annotation6, Nil
+#   collectInteger (annotation_type1.getAnnotationName) list
+# def mytest6 Unit =
+#   def list = annotation1, anntoation2, annotation4, annotation5, annotation6, Nil
+#   collectDouble (annotation_type1.getAnnotationName) list
+# def mytest7 Unit =
+#   def list = annotation1, anntoation2, annotation4, annotation5, annotation6, Nil
+#   collectBoolean (annotation_type1.getAnnotationName) list
+
+# Phase
+tuple Phase =
+  export Name          : String
+  export Transform     : List Annotation => List Annotation
+
+## API TO MAKE PHASE
+export def create_phase name = Phase name
+### TEST
+def phase1 =
+  def transform _annos = _annos ++ ((annotation_type1 | set_annotation_boolean True), Nil)
+  create_phase "test phase" transform
+
+# Stage
+tuple Stage =
+  export Name : String
+  export Phases : List Phase
+  export Wrapper : List Phase
+
+export def execute_stage (Stage name phases _) start_annotations =
+  def pre Unit =
+    match (collectInteger (annotation_logLevel.getAnnotationName) start_annotations | head)
+      None        = Unit
+      Some  value =
+        def pre_pre Unit =
+          if (value >= 1)
+          then
+            println("Start {name} Stage")
+          else
+            Unit
+        def post_post Unit =
+          def temp = phases | map (\each each.getPhaseName) | catWith "\n\t"
+          if (value >= 2) then println("List of phases ::\n\t{temp}") else Unit
+        wait (\_temp post_post Unit) (pre_pre Unit)
+  def actual Unit = phases | foldl (\annos\phase (phase.getPhaseTransform annos)) start_annotations
+  wait (\_temp actual Unit) (pre Unit)
