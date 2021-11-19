@@ -2,10 +2,10 @@ package test
 from stagify import _
 from wake import _
 
-def annotation_CFilePath = create_annotation "CFilePath"
-def annotation_HFilePath = create_annotation "HFilePath"
-def annotation_Compiled = create_annotation "CompiledFilePath"
-def annotation_Execute = create_annotation "Execute"
+def annotation_CFilePath  = create_annotation "CFilePath"
+def annotation_HFilePath  = create_annotation "HFilePath"
+def annotation_Compiled   = create_annotation "CompiledFilePath"
+def annotation_Execute    = create_annotation "Execute"
 
 # def instance_annotation_CFilePath path =
 #   annotation_CFilePath | set_annotation_path path
