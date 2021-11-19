@@ -1,0 +1,47 @@
+package test
+from stagify import _
+from wake import _
+
+def annotation_CFilePath = create_annotation "CFilePath"
+def annotation_HFilePath = create_annotation "HFilePath"
+def annotation_Compiled = create_annotation "CompiledFilePath"
+def annotation_Execute = create_annotation "Execute"
+
+# def instance_annotation_CFilePath path =
+#   annotation_CFilePath | set_annotation_path path
+
+# def instance_annotation_HFilePath path =
+#   annotation_HFilePath | set_annotation_path path
+
+def phase1 =
+  def transform _annos =
+    def cfileanno = (sources "test/src" `.*.c`) | map (\each set_annotation_path each annotation_CFilePath)
+    def hfileanno = (sources "test/src" `.*.h`) | map (\each set_annotation_path each annotation_HFilePath)
+    _annos ++ cfileanno ++ hfileanno
+  create_phase "phase#1" transform
+
+def phase2 =
+  def transform annos =
+    def cfileanno = annos | collectPath (annotation_CFilePath.get_annotation_name) #| map (_ | getOrElse (makeBadPath (makeError "no such file")))
+    def hfileanno = annos | collectPath (annotation_HFilePath.get_annotation_name) #| map(_.getAnnotationPath) | map (_ | getOrElse (makeBadPath (makeError "no such file")))
+    def command = cfileanno | map (_.getPathName) | catWith " "
+    def outputAnno =
+      makePlan "compile" (cfileanno ++ hfileanno) "gcc {command}"
+      | runJob
+      | getJobOutputs
+      | map (\each annotation_Compiled | set_annotation_path each)
+    outputAnno ++ annos
+    # def _ = println cfileanno.format
+    # annos
+  create_phase "phase#2" transform
+
+def phase3 =
+  def transform annos =
+    def compiledFile = annos | collectPath (annotation_Compiled.get_annotation_name) | collectFirst (annotation_Compiled.get_annotation_name)
+    def output =
+      makeExecPlan ("./{compiledFile.getPathName}", Nil) (compiledFile, Nil) | runJob
+      | (\each set_annotation_job each annotation_Execute)
+    annos ++ (output, Nil)
+  create_phase "phase#3" transform
+def test_stage = create_stage "test" (phase1, phase2,phase3, Nil) Nil
+
